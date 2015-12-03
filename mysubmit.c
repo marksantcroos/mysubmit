@@ -560,11 +560,6 @@ int main(int argc, char *argv[])
         //printf("myspawn: %d, mywait: %d\n", myspawn, mywait);
     }
 
-    //printf("waiting\n");
-    while (mywait > 0) {
-        opal_event_loop(orte_event_base, OPAL_EVLOOP_ONCE);
-    }
-
 // DONE:
     printf("DONE\n");
     /* cleanup and leave */
