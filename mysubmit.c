@@ -102,16 +102,9 @@
 /*
  * Globals
  */
-static char **global_mca_env = NULL;
-static orte_std_cntr_t total_num_apps = 0;
-static bool want_prefix_by_default = (bool) ORTE_WANT_ORTERUN_PREFIX_BY_DEFAULT;
-volatile int mywait = 0;
-volatile int myspawn = 0;
-opal_pointer_array_t tool_jobs;
-
-/*
- * Globals
- */
+///*
+// * Globals
+// */
 static struct {
     bool help;
     bool version;
@@ -146,6 +139,15 @@ static struct {
     bool debug;
     bool run_as_root;
 } myglobals;
+
+static char **global_mca_env = NULL;
+static orte_std_cntr_t total_num_apps = 0;
+static bool want_prefix_by_default = (bool) ORTE_WANT_ORTERUN_PREFIX_BY_DEFAULT;
+opal_pointer_array_t tool_jobs;
+volatile int mywait = 0;
+volatile int myspawn = 0;
+
+#include "mysubmit.h"
 
 static opal_cmd_line_init_t cmd_line_init[] = {
     /* Various "obvious" options */
