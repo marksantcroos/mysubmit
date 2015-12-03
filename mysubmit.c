@@ -331,40 +331,6 @@ static void spawn_recv(int status, orte_process_name_t* sender,
                        orte_rml_tag_t tag, void *cbdata);
 void submit_job(char *argv[]);
 
-
-int main(int argc, char *argv[])
-{
-    int i;
-
-    for (i = 0; i < 10; i++) {
-        char *arg;
-        char ** tmpargv;
-
-        tmpargv = opal_argv_copy(argv);
-
-        opal_argv_append_nosize(&tmpargv, "bash");
-        opal_argv_append_nosize(&tmpargv, "-c");
-        asprintf(&arg, "t=%d; echo $t; sleep $t", i);
-        //asprintf(&arg, "t=%d; echo $t; sleep $t", 1);
-        opal_argv_append_nosize(&tmpargv, arg);
-
-        submit_job(tmpargv);
-    }
-
-    while (myspawn > 0 || mywait > 0) {
-        opal_event_loop(orte_event_base, OPAL_EVLOOP_ONCE);
-    }
-
-    printf("DONE\n");
-    /* cleanup and leave */
-    orte_finalize();
-
-    if (orte_debug_flag) {
-        fprintf(stderr, "exiting with status %d\n", orte_exit_status);
-    }
-    exit(orte_exit_status);
-}
-
 //
 // The real thing
 //
