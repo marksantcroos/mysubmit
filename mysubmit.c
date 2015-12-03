@@ -107,6 +107,7 @@ static orte_std_cntr_t total_num_apps = 0;
 static bool want_prefix_by_default = (bool) ORTE_WANT_ORTERUN_PREFIX_BY_DEFAULT;
 volatile int mywait = 0;
 volatile int myspawn = 0;
+opal_pointer_array_t tool_jobs;
 
 /*
  * Globals
@@ -535,11 +536,10 @@ int main(int argc, char *argv[])
     orte_rml.recv_buffer_nb(ORTE_NAME_WILDCARD, ORTE_RML_TAG_CONFIRM_SPAWN,
                             ORTE_RML_PERSISTENT, spawn_recv, NULL);
 
-    printf("Real # arguments: %d\n", opal_argv_count(argv));
-
+    opal_pointer_array_init(&tool_jobs, 256, INT_MAX, 128);
 
     int i;
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < 10; i++) {
         char *arg;
         char ** tmpargv;
 
@@ -547,10 +547,12 @@ int main(int argc, char *argv[])
 
         opal_argv_append_nosize(&tmpargv, "bash");
         opal_argv_append_nosize(&tmpargv, "-c");
-        asprintf(&arg, "t=%d; echo $t; sleep $t", i);
+        //asprintf(&arg, "t=%d; echo $t; sleep $t", i);
+        asprintf(&arg, "t=%d; echo $t; sleep $t", 1);
         opal_argv_append_nosize(&tmpargv, arg);
 
         submit_job(tmpargv);
+
     }
 
     while (myspawn > 0 || mywait > 0) {
@@ -581,9 +583,12 @@ void submit_job(char *argv[]) {
     int rc;
     orte_daemon_cmd_flag_t cmd = ORTE_DAEMON_SPAWN_JOB_CMD;
     char *param;
-    orte_job_t *jdata=NULL;
+    orte_job_t *jdata = NULL;
 
     int argc = opal_argv_count(argv);
+
+    int tool_job_index;
+
 
     /* create a new job object to hold the info for this one - the
      * jobid field will be filled in by the PLM when the job is
@@ -596,6 +601,10 @@ void submit_job(char *argv[]) {
          */
         //return ORTE_ERR_OUT_OF_RESOURCE;
     }
+
+    tool_job_index = opal_pointer_array_add(&tool_jobs, jdata);
+    //printf("Added job at index: %d\n", tool_job_index);
+
     jdata->personality = strdup(myglobals.personality);
 
     /* check what user wants us to do with stdin */
@@ -701,6 +710,10 @@ void submit_job(char *argv[]) {
         exit(rc);
     }
     if (OPAL_SUCCESS != (rc = opal_dss.pack(req, &jdata, 1, ORTE_JOB))) {
+        ORTE_ERROR_LOG(rc);
+        exit(rc);
+    }
+    if (OPAL_SUCCESS != (rc = opal_dss.pack(req, &tool_job_index, 1, OPAL_INT))) {
         ORTE_ERROR_LOG(rc);
         exit(rc);
     }
@@ -1549,6 +1562,8 @@ static void local_recv(int status, orte_process_name_t* sender,
     int rc, ret;
     int32_t cnt;
     orte_jobid_t jobid;
+    int tool_job_index;
+    orte_job_t * job;
 
     //printf("Entering local_recv() for tag: %d with status: %d\n", tag, status);
 
@@ -1563,7 +1578,15 @@ static void local_recv(int status, orte_process_name_t* sender,
     }
     /* update our exit status to match */
     ORTE_UPDATE_EXIT_STATUS(ret);
-    printf("Job %s returned: %d\n", ORTE_JOBID_PRINT(jobid), ret);
+
+    for (tool_job_index=0; tool_job_index < opal_pointer_array_get_size(&tool_jobs); tool_job_index++) {
+        job = (orte_job_t *) opal_pointer_array_get_item(&tool_jobs, tool_job_index);
+        if (job && job->jobid == jobid) {
+            break;
+        }
+    }
+
+    printf("Task: %d returned: %d (Job ID: %s)\n", tool_job_index, ret, ORTE_JOBID_PRINT(jobid));
 
     mywait--;
 
@@ -1576,6 +1599,8 @@ static void spawn_recv(int status, orte_process_name_t* sender,
 {
     int32_t cnt;
     orte_jobid_t jobid;
+    int tool_job_index;
+    orte_job_t *job;
 
     //printf("Entering spawn_recv() for tag: %d with status: %d\n", tag, status);
 
@@ -1583,9 +1608,16 @@ static void spawn_recv(int status, orte_process_name_t* sender,
     cnt = 1;
     opal_dss.unpack(buffer, &jobid, &cnt, ORTE_JOBID);
 
-    printf("Job %s is launched!\n", ORTE_JOBID_PRINT(jobid));
+    // extract the returned tool job index
+    cnt = 1;
+    opal_dss.unpack(buffer, &tool_job_index, &cnt, OPAL_INT);
+
+    printf("Task: %d is launched! (Job ID: %s)\n", tool_job_index, ORTE_JOBID_PRINT(jobid));
+
+    // Store the job id in the job data
+    job = opal_pointer_array_get_item(&tool_jobs, tool_job_index);
+    job->jobid = jobid;
 
     // release the wait
     myspawn--;
-
 }
