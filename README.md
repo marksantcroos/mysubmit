@@ -12,3 +12,9 @@ gcc -g -o mysubmit mysubmit.c \
   -I ../src/ompi/opal/mca/event/libevent2022/libevent \
   -L ../installed/DEBUG/lib -lopen-rte -lopen-pal
 ```
+
+# How to run
+
+``` bash
+./mysubmit --hnp file:/Users/mark/proj/openmpi/mysubmit/dvm_uri -np 1 /bin/bash -c 't=$[($RANDOM % 10)]; echo $t; sleep $t'
+```
