@@ -328,7 +328,7 @@ static void local_recv(int status, orte_process_name_t* sender,
 static void spawn_recv(int status, orte_process_name_t* sender,
                        opal_buffer_t *buffer,
                        orte_rml_tag_t tag, void *cbdata);
-void submit_job(int argc, char *argv[]);
+void submit_job(char *argv[]);
 
 
 int main(int argc, char *argv[])
@@ -535,9 +535,23 @@ int main(int argc, char *argv[])
     orte_rml.recv_buffer_nb(ORTE_NAME_WILDCARD, ORTE_RML_TAG_CONFIRM_SPAWN,
                             ORTE_RML_PERSISTENT, spawn_recv, NULL);
 
-    submit_job(argc, argv);
-    //submit_job(argc, argv);
-    //submit_job(argc, argv);
+    printf("Real # arguments: %d\n", opal_argv_count(argv));
+
+
+    int i;
+    for (i = 0; i < 3; i++) {
+        char *arg;
+        char ** tmpargv;
+
+        tmpargv = opal_argv_copy(argv);
+
+        opal_argv_append_nosize(&tmpargv, "bash");
+        opal_argv_append_nosize(&tmpargv, "-c");
+        asprintf(&arg, "t=%d; echo $t; sleep $t", i);
+        opal_argv_append_nosize(&tmpargv, arg);
+
+        submit_job(tmpargv);
+    }
 
     while (myspawn > 0 || mywait > 0) {
         opal_event_loop(orte_event_base, OPAL_EVLOOP_ONCE);
@@ -549,7 +563,7 @@ int main(int argc, char *argv[])
         opal_event_loop(orte_event_base, OPAL_EVLOOP_ONCE);
     }
 
- DONE:
+// DONE:
     printf("DONE\n");
     /* cleanup and leave */
     orte_finalize();
@@ -560,13 +574,16 @@ int main(int argc, char *argv[])
     exit(orte_exit_status);
 }
 
-void submit_job(int argc, char *argv[]) {
+//void submit_job(int argc, char *argv[]) {
+void submit_job(char *argv[]) {
 
     opal_buffer_t *req;
     int rc;
     orte_daemon_cmd_flag_t cmd = ORTE_DAEMON_SPAWN_JOB_CMD;
     char *param;
     orte_job_t *jdata=NULL;
+
+    int argc = opal_argv_count(argv);
 
     /* create a new job object to hold the info for this one - the
      * jobid field will be filled in by the PLM when the job is
@@ -646,7 +663,6 @@ void submit_job(int argc, char *argv[]) {
             exit(rc);
         }
     }
-
 
     /* if they asked for nolocal, mark it so */
     if (myglobals.nolocal) {
