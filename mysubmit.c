@@ -473,9 +473,6 @@ int main(int argc, char *argv[])
     /* Setup MCA params */
     orte_register_params();
 
-    /* flag that I am a TOOL */
-    orte_process_info.proc_type = ORTE_PROC_TOOL;
-
     /* we are never allowed to operate as a distributed tool,
      * so insist on the ess/tool component */
     opal_setenv("OMPI_MCA_ess", "tool", true, &environ);
