@@ -334,14 +334,62 @@ void submit_job(char *argv[]);
 
 int main(int argc, char *argv[])
 {
-    int rc;
-    opal_cmd_line_t cmd_line;
+    int i;
 
-    /* Setup and parse the command line */
-    memset(&myglobals, 0, sizeof(myglobals));
-    /* find our basename (the name of the executable) so that we can
-       use it in pretty-print error messages */
-    orte_basename = opal_basename(argv[0]);
+    for (i = 0; i < 10; i++) {
+        char *arg;
+        char ** tmpargv;
+
+        tmpargv = opal_argv_copy(argv);
+
+        opal_argv_append_nosize(&tmpargv, "bash");
+        opal_argv_append_nosize(&tmpargv, "-c");
+        asprintf(&arg, "t=%d; echo $t; sleep $t", i);
+        //asprintf(&arg, "t=%d; echo $t; sleep $t", 1);
+        opal_argv_append_nosize(&tmpargv, arg);
+
+        submit_job(tmpargv);
+    }
+
+    while (myspawn > 0 || mywait > 0) {
+        opal_event_loop(orte_event_base, OPAL_EVLOOP_ONCE);
+    }
+
+    printf("DONE\n");
+    /* cleanup and leave */
+    orte_finalize();
+
+    if (orte_debug_flag) {
+        fprintf(stderr, "exiting with status %d\n", orte_exit_status);
+    }
+    exit(orte_exit_status);
+}
+
+//
+// The real thing
+//
+void submit_job(char *argv[]) {
+
+    opal_buffer_t *req;
+    int rc;
+    orte_daemon_cmd_flag_t cmd = ORTE_DAEMON_SPAWN_JOB_CMD;
+    char *param;
+    orte_job_t *jdata = NULL;
+    int argc = opal_argv_count(argv);
+    int tool_job_index;
+    opal_cmd_line_t cmd_line;
+    static bool first = true;
+
+    if (first) {
+        opal_pointer_array_init(&tool_jobs, 256, INT_MAX, 128);
+
+        /* Setup and parse the command line */
+        memset(&myglobals, 0, sizeof(myglobals));
+        /* find our basename (the name of the executable) so that we can
+           use it in pretty-print error messages */
+        orte_basename = opal_basename(argv[0]);
+
+    }
 
     opal_cmd_line_create(&cmd_line, cmd_line_init);
     mca_base_cmd_line_setup(&cmd_line);
@@ -351,7 +399,7 @@ int main(int argc, char *argv[])
             fprintf(stderr, "%s: command line error (%s)\n", argv[0],
                     opal_strerror(rc));
         }
-        return rc;
+        //return rc;
     }
 
     /* print version if requested.  Do this before check for help so
@@ -371,10 +419,10 @@ int main(int argc, char *argv[])
         exit(0);
     }
 
-     /*
-     * Since this process can now handle MCA/GMCA parameters, make sure to
-     * process them.
-     */
+    /*
+    * Since this process can now handle MCA/GMCA parameters, make sure to
+    * process them.
+    */
     if (OPAL_SUCCESS != mca_base_cmd_line_process_args(&cmd_line, &environ, &environ)) {
         exit(1);
     }
@@ -482,17 +530,17 @@ int main(int argc, char *argv[])
         orte_devel_level_output = true;
     }
 
-   /* Initialize our Open RTE environment
-     * Set the flag telling orte_init that I am NOT a
-     * singleton, but am "infrastructure" - prevents setting
-     * up incorrect infrastructure that only a singleton would
-     * require
-     */
+    /* Initialize our Open RTE environment
+      * Set the flag telling orte_init that I am NOT a
+      * singleton, but am "infrastructure" - prevents setting
+      * up incorrect infrastructure that only a singleton would
+      * require
+      */
     if (ORTE_SUCCESS != (rc = orte_init(&argc, &argv, ORTE_PROC_TOOL))) {
         /* cannot call ORTE_ERROR_LOG as it could be the errmgr
          * never got loaded!
          */
-        return rc;
+        //return rc;
     }
     /* finalize OPAL. As it was opened again from orte_init->opal_init
      * we continue to have a reference count on it. So we have to finalize it twice...
@@ -517,73 +565,24 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-     /* set the target hnp as our lifeline so we will terminate if it exits */
+    /* set the target hnp as our lifeline so we will terminate if it exits */
     orte_routed.set_lifeline(ORTE_PROC_MY_HNP);
 
+    if (first) {
+
+        /* setup to listen for HNP response to my commands */
+        orte_rml.recv_buffer_nb(ORTE_NAME_WILDCARD, ORTE_RML_TAG_TOOL,
+                                ORTE_RML_PERSISTENT, local_recv, NULL);
+
+    }
+
     /* set a timeout event in case the HNP doesn't answer */
+    // TODO: to which code does this belong?
 
     /* default our personality to OMPI */
     if (NULL == myglobals.personality) {
         myglobals.personality = strdup("ompi");
     }
-
-    /* setup to listen for HNP response to my commands */
-    orte_rml.recv_buffer_nb(ORTE_NAME_WILDCARD, ORTE_RML_TAG_TOOL,
-                            ORTE_RML_PERSISTENT, local_recv, NULL);
-
-    /* ask the HNP to spawn the job for us */
-    // post recv on tag_confirm_spawn, pass jdata as cbdata
-    orte_rml.recv_buffer_nb(ORTE_NAME_WILDCARD, ORTE_RML_TAG_CONFIRM_SPAWN,
-                            ORTE_RML_PERSISTENT, spawn_recv, NULL);
-
-    opal_pointer_array_init(&tool_jobs, 256, INT_MAX, 128);
-
-    int i;
-    for (i = 0; i < 10; i++) {
-        char *arg;
-        char ** tmpargv;
-
-        tmpargv = opal_argv_copy(argv);
-
-        opal_argv_append_nosize(&tmpargv, "bash");
-        opal_argv_append_nosize(&tmpargv, "-c");
-        //asprintf(&arg, "t=%d; echo $t; sleep $t", i);
-        asprintf(&arg, "t=%d; echo $t; sleep $t", 1);
-        opal_argv_append_nosize(&tmpargv, arg);
-
-        submit_job(tmpargv);
-
-    }
-
-    while (myspawn > 0 || mywait > 0) {
-        opal_event_loop(orte_event_base, OPAL_EVLOOP_ONCE);
-        //printf("myspawn: %d, mywait: %d\n", myspawn, mywait);
-    }
-
-// DONE:
-    printf("DONE\n");
-    /* cleanup and leave */
-    orte_finalize();
-
-    if (orte_debug_flag) {
-        fprintf(stderr, "exiting with status %d\n", orte_exit_status);
-    }
-    exit(orte_exit_status);
-}
-
-//void submit_job(int argc, char *argv[]) {
-void submit_job(char *argv[]) {
-
-    opal_buffer_t *req;
-    int rc;
-    orte_daemon_cmd_flag_t cmd = ORTE_DAEMON_SPAWN_JOB_CMD;
-    char *param;
-    orte_job_t *jdata = NULL;
-
-    int argc = opal_argv_count(argv);
-
-    int tool_job_index;
-
 
     /* create a new job object to hold the info for this one - the
      * jobid field will be filled in by the PLM when the job is
@@ -596,11 +595,10 @@ void submit_job(char *argv[]) {
          */
         //return ORTE_ERR_OUT_OF_RESOURCE;
     }
+    jdata->personality = strdup(myglobals.personality);
 
     tool_job_index = opal_pointer_array_add(&tool_jobs, jdata);
     //printf("Added job at index: %d\n", tool_job_index);
-
-    jdata->personality = strdup(myglobals.personality);
 
     /* check what user wants us to do with stdin */
     if (NULL != myglobals.stdin_target) {
@@ -613,21 +611,9 @@ void submit_job(char *argv[]) {
         }
     }
 
-    /* check for a job timeout specification, to be provided in seconds
-     * as that is what MPICH used
-     */
-    if (NULL != (param = getenv("MPIEXEC_TIMEOUT"))) {
-        if (NULL == (orte_mpiexec_timeout = OBJ_NEW(orte_timer_t))) {
-            ORTE_ERROR_LOG(ORTE_ERR_OUT_OF_RESOURCE);
-            ORTE_UPDATE_EXIT_STATUS(ORTE_ERR_OUT_OF_RESOURCE);
-            //goto DONE;
-        }
-        orte_mpiexec_timeout->tv.tv_sec = strtol(param, NULL, 10);
-        orte_mpiexec_timeout->tv.tv_usec = 0;
-        opal_event_evtimer_set(orte_event_base, orte_mpiexec_timeout->ev,
-                               orte_timeout_wakeup, jdata);
-        opal_event_set_priority(orte_mpiexec_timeout->ev, ORTE_ERROR_PRI);
-        opal_event_evtimer_add(orte_mpiexec_timeout->ev, &orte_mpiexec_timeout->tv);
+    /* if we want the argv's indexed, indicate that */
+    if (myglobals.index_argv) {
+        orte_set_attribute(&jdata->attributes, ORTE_JOB_INDEX_ARGV, ORTE_ATTR_GLOBAL, NULL, OPAL_BOOL);
     }
 
     /* Parse each app, adding it to the job object */
@@ -693,9 +679,33 @@ void submit_job(char *argv[]) {
         exit(ORTE_ERROR_DEFAULT_EXIT_CODE);
     }
 
+    /* check for a job timeout specification, to be provided in seconds
+     * as that is what MPICH used
+     */
+    if (NULL != (param = getenv("MPIEXEC_TIMEOUT"))) {
+        if (NULL == (orte_mpiexec_timeout = OBJ_NEW(orte_timer_t))) {
+            ORTE_ERROR_LOG(ORTE_ERR_OUT_OF_RESOURCE);
+            ORTE_UPDATE_EXIT_STATUS(ORTE_ERR_OUT_OF_RESOURCE);
+            //goto DONE;
+        }
+        orte_mpiexec_timeout->tv.tv_sec = strtol(param, NULL, 10);
+        orte_mpiexec_timeout->tv.tv_usec = 0;
+        opal_event_evtimer_set(orte_event_base, orte_mpiexec_timeout->ev,
+                               orte_timeout_wakeup, jdata);
+        opal_event_set_priority(orte_mpiexec_timeout->ev, ORTE_ERROR_PRI);
+        opal_event_evtimer_add(orte_mpiexec_timeout->ev, &orte_mpiexec_timeout->tv);
+    }
+
     /* if recovery was disabled on the cmd line, do so */
     if (myglobals.enable_recovery) {
         ORTE_FLAG_SET(jdata, ORTE_JOB_FLAG_RECOVERABLE);
+    }
+
+    if (first) {
+        /* ask the HNP to spawn the job for us */
+        // post recv on tag_confirm_spawn, pass jdata as cbdata
+        orte_rml.recv_buffer_nb(ORTE_NAME_WILDCARD, ORTE_RML_TAG_CONFIRM_SPAWN,
+                                ORTE_RML_PERSISTENT, spawn_recv, NULL);
     }
 
     // pack the ORTE_DAEMON_SPAWN_JOB_CMD command and job object and send to HNP at tag ORTE_RML_TAG_DAEMON
@@ -716,6 +726,8 @@ void submit_job(char *argv[]) {
     orte_rml.send_buffer_nb(ORTE_PROC_MY_HNP, req, ORTE_RML_TAG_DAEMON, orte_rml_send_callback, NULL);
     myspawn++;
     mywait++;
+
+    first = false;
 
 }
 
