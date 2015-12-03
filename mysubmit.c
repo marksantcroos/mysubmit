@@ -328,15 +328,13 @@ static void local_recv(int status, orte_process_name_t* sender,
 static void spawn_recv(int status, orte_process_name_t* sender,
                        opal_buffer_t *buffer,
                        orte_rml_tag_t tag, void *cbdata);
-void submit_job(orte_job_t *jdata);
+void submit_job(int argc, char *argv[]);
 
 
 int main(int argc, char *argv[])
 {
     int rc;
     opal_cmd_line_t cmd_line;
-    char *param;
-    orte_job_t *jdata=NULL;
 
     /* Setup and parse the command line */
     memset(&myglobals, 0, sizeof(myglobals));
@@ -531,6 +529,48 @@ int main(int argc, char *argv[])
         myglobals.personality = strdup("ompi");
     }
 
+    /* setup to listen for HNP response to my commands */
+    orte_rml.recv_buffer_nb(ORTE_NAME_WILDCARD, ORTE_RML_TAG_TOOL,
+                            ORTE_RML_PERSISTENT, local_recv, NULL);
+
+    /* ask the HNP to spawn the job for us */
+    // post recv on tag_confirm_spawn, pass jdata as cbdata
+    orte_rml.recv_buffer_nb(ORTE_NAME_WILDCARD, ORTE_RML_TAG_CONFIRM_SPAWN,
+                            ORTE_RML_PERSISTENT, spawn_recv, NULL);
+
+    submit_job(argc, argv);
+    //submit_job(argc, argv);
+    //submit_job(argc, argv);
+
+    while (myspawn > 0 || mywait > 0) {
+        opal_event_loop(orte_event_base, OPAL_EVLOOP_ONCE);
+        //printf("myspawn: %d, mywait: %d\n", myspawn, mywait);
+    }
+
+    //printf("waiting\n");
+    while (mywait > 0) {
+        opal_event_loop(orte_event_base, OPAL_EVLOOP_ONCE);
+    }
+
+ DONE:
+    printf("DONE\n");
+    /* cleanup and leave */
+    orte_finalize();
+
+    if (orte_debug_flag) {
+        fprintf(stderr, "exiting with status %d\n", orte_exit_status);
+    }
+    exit(orte_exit_status);
+}
+
+void submit_job(int argc, char *argv[]) {
+
+    opal_buffer_t *req;
+    int rc;
+    orte_daemon_cmd_flag_t cmd = ORTE_DAEMON_SPAWN_JOB_CMD;
+    char *param;
+    orte_job_t *jdata=NULL;
+
     /* create a new job object to hold the info for this one - the
      * jobid field will be filled in by the PLM when the job is
      * launched
@@ -540,7 +580,7 @@ int main(int argc, char *argv[])
         /* cannot call ORTE_ERROR_LOG as the errmgr
          * hasn't been loaded yet!
          */
-        return ORTE_ERR_OUT_OF_RESOURCE;
+        //return ORTE_ERR_OUT_OF_RESOURCE;
     }
     jdata->personality = strdup(myglobals.personality);
 
@@ -555,9 +595,21 @@ int main(int argc, char *argv[])
         }
     }
 
-    /* if we want the argv's indexed, indicate that */
-    if (myglobals.index_argv) {
-        orte_set_attribute(&jdata->attributes, ORTE_JOB_INDEX_ARGV, ORTE_ATTR_GLOBAL, NULL, OPAL_BOOL);
+    /* check for a job timeout specification, to be provided in seconds
+     * as that is what MPICH used
+     */
+    if (NULL != (param = getenv("MPIEXEC_TIMEOUT"))) {
+        if (NULL == (orte_mpiexec_timeout = OBJ_NEW(orte_timer_t))) {
+            ORTE_ERROR_LOG(ORTE_ERR_OUT_OF_RESOURCE);
+            ORTE_UPDATE_EXIT_STATUS(ORTE_ERR_OUT_OF_RESOURCE);
+            //goto DONE;
+        }
+        orte_mpiexec_timeout->tv.tv_sec = strtol(param, NULL, 10);
+        orte_mpiexec_timeout->tv.tv_usec = 0;
+        opal_event_evtimer_set(orte_event_base, orte_mpiexec_timeout->ev,
+                               orte_timeout_wakeup, jdata);
+        opal_event_set_priority(orte_mpiexec_timeout->ev, ORTE_ERROR_PRI);
+        opal_event_evtimer_add(orte_mpiexec_timeout->ev, &orte_mpiexec_timeout->tv);
     }
 
     /* Parse each app, adding it to the job object */
@@ -598,6 +650,7 @@ int main(int argc, char *argv[])
         }
     }
 
+
     /* if they asked for nolocal, mark it so */
     if (myglobals.nolocal) {
         ORTE_SET_MAPPING_DIRECTIVE(jdata->map->mapping, ORTE_MAPPING_NO_USE_LOCAL);
@@ -623,67 +676,10 @@ int main(int argc, char *argv[])
         exit(ORTE_ERROR_DEFAULT_EXIT_CODE);
     }
 
-    /* check for a job timeout specification, to be provided in seconds
-     * as that is what MPICH used
-     */
-    if (NULL != (param = getenv("MPIEXEC_TIMEOUT"))) {
-        if (NULL == (orte_mpiexec_timeout = OBJ_NEW(orte_timer_t))) {
-            ORTE_ERROR_LOG(ORTE_ERR_OUT_OF_RESOURCE);
-            ORTE_UPDATE_EXIT_STATUS(ORTE_ERR_OUT_OF_RESOURCE);
-            goto DONE;
-        }
-        orte_mpiexec_timeout->tv.tv_sec = strtol(param, NULL, 10);
-        orte_mpiexec_timeout->tv.tv_usec = 0;
-        opal_event_evtimer_set(orte_event_base, orte_mpiexec_timeout->ev,
-                               orte_timeout_wakeup, jdata);
-        opal_event_set_priority(orte_mpiexec_timeout->ev, ORTE_ERROR_PRI);
-        opal_event_evtimer_add(orte_mpiexec_timeout->ev, &orte_mpiexec_timeout->tv);
-    }
-
     /* if recovery was disabled on the cmd line, do so */
     if (myglobals.enable_recovery) {
         ORTE_FLAG_SET(jdata, ORTE_JOB_FLAG_RECOVERABLE);
     }
-
-    /* setup to listen for HNP response to my commands */
-    orte_rml.recv_buffer_nb(ORTE_NAME_WILDCARD, ORTE_RML_TAG_TOOL,
-                            ORTE_RML_PERSISTENT, local_recv, NULL);
-
-
-    /* ask the HNP to spawn the job for us */
-    // post recv on tag_confirm_spawn, pass jdata as cbdata
-    orte_rml.recv_buffer_nb(ORTE_NAME_WILDCARD, ORTE_RML_TAG_CONFIRM_SPAWN,
-                            ORTE_RML_PERSISTENT, spawn_recv, NULL);
-
-    submit_job(jdata);
-    submit_job(jdata);
-
-    while (myspawn > 0 || mywait > 0) {
-        opal_event_loop(orte_event_base, OPAL_EVLOOP_ONCE);
-        //printf("myspawn: %d, mywait: %d\n", myspawn, mywait);
-    }
-
-    //printf("waiting\n");
-    while (mywait > 0) {
-        opal_event_loop(orte_event_base, OPAL_EVLOOP_ONCE);
-    }
-
- DONE:
-    printf("DONE\n");
-    /* cleanup and leave */
-    orte_finalize();
-
-    if (orte_debug_flag) {
-        fprintf(stderr, "exiting with status %d\n", orte_exit_status);
-    }
-    exit(orte_exit_status);
-}
-
-void submit_job(orte_job_t *jdata) {
-
-    opal_buffer_t *req;
-    int rc;
-    orte_daemon_cmd_flag_t cmd = ORTE_DAEMON_SPAWN_JOB_CMD;
 
     // pack the ORTE_DAEMON_SPAWN_JOB_CMD command and job object and send to HNP at tag ORTE_RML_TAG_DAEMON
     req = OBJ_NEW(opal_buffer_t);
