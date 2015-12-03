@@ -328,6 +328,7 @@ static void local_recv(int status, orte_process_name_t* sender,
 static void spawn_recv(int status, orte_process_name_t* sender,
                        opal_buffer_t *buffer,
                        orte_rml_tag_t tag, void *cbdata);
+void submit_job(orte_job_t *jdata);
 
 
 int main(int argc, char *argv[])
@@ -336,8 +337,6 @@ int main(int argc, char *argv[])
     opal_cmd_line_t cmd_line;
     char *param;
     orte_job_t *jdata=NULL;
-    opal_buffer_t *req;
-    orte_daemon_cmd_flag_t cmd = ORTE_DAEMON_SPAWN_JOB_CMD;
 
     /* Setup and parse the command line */
     memset(&myglobals, 0, sizeof(myglobals));
@@ -545,7 +544,6 @@ int main(int argc, char *argv[])
     }
     jdata->personality = strdup(myglobals.personality);
 
-
     /* check what user wants us to do with stdin */
     if (NULL != myglobals.stdin_target) {
         if (0 == strcmp(myglobals.stdin_target, "all")) {
@@ -564,7 +562,6 @@ int main(int argc, char *argv[])
 
     /* Parse each app, adding it to the job object */
     parse_locals(jdata, argc, argv);
-
 
     /* create the map object to communicate policies */
     jdata->map = OBJ_NEW(orte_job_map_t);
@@ -658,54 +655,8 @@ int main(int argc, char *argv[])
     orte_rml.recv_buffer_nb(ORTE_NAME_WILDCARD, ORTE_RML_TAG_CONFIRM_SPAWN,
                             ORTE_RML_PERSISTENT, spawn_recv, NULL);
 
-    /* FIRST */
-
-    // pack the ORTE_DAEMON_SPAWN_JOB_CMD command and job object and send to HNP at tag ORTE_RML_TAG_DAEMON
-    req = OBJ_NEW(opal_buffer_t);
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(req, &cmd, 1, ORTE_DAEMON_CMD))) {
-        ORTE_ERROR_LOG(rc);
-        exit(rc);
-    }
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(req, &jdata, 1, ORTE_JOB))) {
-        ORTE_ERROR_LOG(rc);
-        exit(rc);
-    }
-
-    orte_rml.send_buffer_nb(ORTE_PROC_MY_HNP, req, ORTE_RML_TAG_DAEMON, orte_rml_send_callback, NULL);
-    myspawn++;
-    mywait++;
-
-    /* SECOND */
-
-    // pack the ORTE_DAEMON_SPAWN_JOB_CMD command and job object and send to HNP at tag ORTE_RML_TAG_DAEMON
-    req = OBJ_NEW(opal_buffer_t);
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(req, &cmd, 1, ORTE_DAEMON_CMD))) {
-        ORTE_ERROR_LOG(rc);
-        exit(rc);
-    }
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(req, &jdata, 1, ORTE_JOB))) {
-        ORTE_ERROR_LOG(rc);
-        exit(rc);
-    }
-    orte_rml.send_buffer_nb(ORTE_PROC_MY_HNP, req, ORTE_RML_TAG_DAEMON, orte_rml_send_callback, NULL);
-    myspawn++;
-    mywait++;
-
-    /* THIRD */
-
-    // pack the ORTE_DAEMON_SPAWN_JOB_CMD command and job object and send to HNP at tag ORTE_RML_TAG_DAEMON
-    req = OBJ_NEW(opal_buffer_t);
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(req, &cmd, 1, ORTE_DAEMON_CMD))) {
-        ORTE_ERROR_LOG(rc);
-        exit(rc);
-    }
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(req, &jdata, 1, ORTE_JOB))) {
-        ORTE_ERROR_LOG(rc);
-        exit(rc);
-    }
-    orte_rml.send_buffer_nb(ORTE_PROC_MY_HNP, req, ORTE_RML_TAG_DAEMON, orte_rml_send_callback, NULL);
-    myspawn++;
-    mywait++;
+    submit_job(jdata);
+    submit_job(jdata);
 
     while (myspawn > 0 || mywait > 0) {
         opal_event_loop(orte_event_base, OPAL_EVLOOP_ONCE);
@@ -727,6 +678,30 @@ int main(int argc, char *argv[])
     }
     exit(orte_exit_status);
 }
+
+void submit_job(orte_job_t *jdata) {
+
+    opal_buffer_t *req;
+    int rc;
+    orte_daemon_cmd_flag_t cmd = ORTE_DAEMON_SPAWN_JOB_CMD;
+
+    // pack the ORTE_DAEMON_SPAWN_JOB_CMD command and job object and send to HNP at tag ORTE_RML_TAG_DAEMON
+    req = OBJ_NEW(opal_buffer_t);
+    if (OPAL_SUCCESS != (rc = opal_dss.pack(req, &cmd, 1, ORTE_DAEMON_CMD))) {
+        ORTE_ERROR_LOG(rc);
+        exit(rc);
+    }
+    if (OPAL_SUCCESS != (rc = opal_dss.pack(req, &jdata, 1, ORTE_JOB))) {
+        ORTE_ERROR_LOG(rc);
+        exit(rc);
+    }
+
+    orte_rml.send_buffer_nb(ORTE_PROC_MY_HNP, req, ORTE_RML_TAG_DAEMON, orte_rml_send_callback, NULL);
+    myspawn++;
+    mywait++;
+
+}
+
 
 static int init_globals(void)
 {
