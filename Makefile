@@ -1,7 +1,7 @@
-all: main 
+all: main ompi_cffi.so
 
 clean:
-	rm -rf libsubmit.so mysubmit.o main mysubmit
+	rm -rf libsubmit.so mysubmit.o main mysubmit ompi_cffi.so ompi_cffi.o ompi_cffi.c main.dSYM
 
 mysubmit.o: mysubmit.c
 	gcc -fPIC -Wall -g -c mysubmit.c -I ../src/ompi/orte/include -I ../src/ompi/build/opal/include -I ../src/ompi/opal/include -I ../src/ompi -I ../src/ompi/opal/mca/event/libevent2022/libevent -L ../installed/DEBUG/lib -lopen-rte -lopen-pal
@@ -14,5 +14,5 @@ main: main.c libsubmit.so mysubmit.h
 	#gcc -Wall -g -o main main.c mysubmit.o -I ../src/ompi/orte/include -I ../src/ompi/build/opal/include -I ../src/ompi/opal/include -I ../src/ompi -I ../src/ompi/opal/mca/event/libevent2022/libevent -L ../installed/DEBUG/lib -lopen-rte -lopen-pal
 	gcc -Wall -g -o main main.c -I ../src/ompi/orte/include -I ../src/ompi/build/opal/include -I ../src/ompi/opal/include -I ../src/ompi -I ../src/ompi/opal/mca/event/libevent2022/libevent -L ../installed/DEBUG/lib -lopen-rte -lopen-pal -lsubmit -L.
 
-mysubmit: mysubmit.c
-	gcc -Wall -g -o mysubmit mysubmit.c -I ../src/ompi/orte/include -I ../src/ompi/build/opal/include -I ../src/ompi/opal/include -I ../src/ompi -I ../src/ompi/opal/mca/event/libevent2022/libevent -L ../installed/DEBUG/lib -lopen-rte -lopen-pal
+ompi_cffi.so: build_ompi_cffi.py
+	python build_ompi_cffi.py
