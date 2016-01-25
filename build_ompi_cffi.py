@@ -3,6 +3,9 @@ ffi = FFI()
 
 ffi.set_source("ompi_cffi", """
 
+//#include "opal/util/opal_environ.h"
+#include "orte/mca/plm/plm.h"
+
 #include "mysubmit.h"
 
 """,
@@ -12,8 +15,8 @@ ffi.set_source("ompi_cffi", """
         "open-rte"
     ],
     library_dirs=[
-        ".",
-        "../installed/DEBUG/lib"
+        "../installed/DEBUG/lib",
+        "/Users/mark/proj/openmpi/mysubmit"
     ],
     include_dirs=[
         "../src/ompi/orte/include",
@@ -33,7 +36,7 @@ ffi.cdef("""
 #define OPAL_EVLOOP_ONCE ...
 
 /* Functions */
-int submit_job(char *argv[], void (*launch_cb)(int), void (*finish_cb)(int, int));
+int submit_job(char *argv[], void (*launch_cb)(int, void *), void (*finish_cb)(int, int, void *), void *cbdata);
 int opal_event_loop(struct event_base *, int);
 
 /* Variables */

@@ -144,6 +144,7 @@ static char **global_mca_env = NULL;
 static orte_std_cntr_t total_num_apps = 0;
 static bool want_prefix_by_default = (bool) ORTE_WANT_ORTERUN_PREFIX_BY_DEFAULT;
 opal_pointer_array_t tool_jobs;
+opal_pointer_array_t class_ptrs;
 
 #include "mysubmit.h"
 
@@ -305,6 +306,10 @@ static opal_cmd_line_init_t cmd_line_init[] = {
       &myglobals.run_as_root, OPAL_CMD_LINE_TYPE_BOOL,
       "Allow execution as root (STRONGLY DISCOURAGED)" },
 
+    { "orte_output_filename", '\0', "output-filename", "output-filename", 1,
+            NULL, OPAL_CMD_LINE_TYPE_STRING,
+            "Redirect output from application processes into filename.rank" },
+
     /* End of list */
     { NULL, '\0', NULL, NULL, 0,
       NULL, OPAL_CMD_LINE_TYPE_NULL, NULL }
@@ -325,15 +330,15 @@ static int parse_appfile(orte_job_t *jdata, char *filename, char ***env);
 static void orte_timeout_wakeup(int sd, short args, void *cbdata);
 static void local_recv(int status, orte_process_name_t* sender,
                        opal_buffer_t *buffer,
-                       orte_rml_tag_t tag, void (*cbdata)(int, int));
+                       orte_rml_tag_t tag, void (*cbdata)(int, int, void *));
 static void spawn_recv(int status, orte_process_name_t* sender,
                        opal_buffer_t *buffer,
-                       orte_rml_tag_t tag, void (*cbdata)(int));
+                       orte_rml_tag_t tag, void (*cbdata)(int, void *));
 
 //
 // The real thing
 //
-int submit_job(char *argv[], void (*launch_cb)(int), void (*finish_cb)(int, int)){
+int submit_job(char *argv[], void (*launch_cb)(int, void *), void (*finish_cb)(int, int, void *), void *class_ptr){
 
     opal_buffer_t *req;
     int rc;
@@ -344,9 +349,14 @@ int submit_job(char *argv[], void (*launch_cb)(int), void (*finish_cb)(int, int)
     int tool_job_index;
     opal_cmd_line_t cmd_line;
     static bool first = true;
+    int i;
+
+//    for (i=0; i<argc; i++)
+//        printf("argv[%d]: %s\n", i, argv[i]);
 
     if (first) {
         opal_pointer_array_init(&tool_jobs, 256, INT_MAX, 128);
+        opal_pointer_array_init(&class_ptrs, 256, INT_MAX, 128);
 
         /* Setup and parse the command line */
         memset(&myglobals, 0, sizeof(myglobals));
@@ -541,6 +551,7 @@ int submit_job(char *argv[], void (*launch_cb)(int), void (*finish_cb)(int, int)
 
     }
 
+
     /* set a timeout event in case the HNP doesn't answer */
     // TODO: to which code does this belong?
 
@@ -563,6 +574,9 @@ int submit_job(char *argv[], void (*launch_cb)(int), void (*finish_cb)(int, int)
     jdata->personality = strdup(myglobals.personality);
 
     tool_job_index = opal_pointer_array_add(&tool_jobs, jdata);
+    opal_pointer_array_add(&class_ptrs, class_ptr);
+    // TODO: check/ensure that there are on the same index
+
     //printf("Added job at index: %d\n", tool_job_index);
 
     /* check what user wants us to do with stdin */
@@ -618,6 +632,7 @@ int submit_job(char *argv[], void (*launch_cb)(int), void (*finish_cb)(int, int)
             exit(rc);
         }
     }
+
 
     /* if they asked for nolocal, mark it so */
     if (myglobals.nolocal) {
@@ -1529,15 +1544,16 @@ void orte_timeout_wakeup(int sd, short args, void *cbdata)
 
 static void local_recv(int status, orte_process_name_t* sender,
                        opal_buffer_t *buffer,
-                       orte_rml_tag_t tag, void (*cbdata)(int, int))
+                       orte_rml_tag_t tag, void (*cbdata)(int, int, void *))
 {
     int rc, ret;
     int32_t cnt;
     orte_jobid_t jobid;
     int tool_job_index;
     orte_job_t * job;
+    void * class_ptr;
 
-    //printf("Entering local_recv() for tag: %d with status: %d\n", tag, status);
+    printf("Entering local_recv() for tag: %d with status: %d\n", tag, status);
 
     /* unpack the completion status of the job */
     cnt = 1;
@@ -1548,6 +1564,8 @@ static void local_recv(int status, orte_process_name_t* sender,
     if (OPAL_SUCCESS != (rc = opal_dss.unpack(buffer, &ret, &cnt, OPAL_INT))) {
         ORTE_UPDATE_EXIT_STATUS(rc);
     }
+    printf("ret: %d, rc: %d\n", ret, rc);
+
     /* update our exit status to match */
     ORTE_UPDATE_EXIT_STATUS(ret);
 
@@ -1560,20 +1578,24 @@ static void local_recv(int status, orte_process_name_t* sender,
 
     printf("[ORTE] Task: %d returned: %d (Job ID: %s)\n", tool_job_index, ret, ORTE_JOBID_PRINT(jobid));
 
+    /* Retrieve class pointer */
+    class_ptr = opal_pointer_array_get_item(&class_ptrs, tool_job_index);
+
     /* Inform client */
     if (cbdata != NULL)
-        (*cbdata)(tool_job_index, ret);
+        (*cbdata)(tool_job_index, ret, class_ptr);
 
 }
 
 static void spawn_recv(int status, orte_process_name_t* sender,
                        opal_buffer_t *buffer,
-                       orte_rml_tag_t tag, void (*cbdata)(int))
+                       orte_rml_tag_t tag, void (*cbdata)(int, void *))
 {
     int32_t cnt;
     orte_jobid_t jobid;
     int tool_job_index;
     orte_job_t *job;
+    void *class_ptr;
 
     //printf("Entering spawn_recv() for tag: %d with status: %d\n", tag, status);
 
@@ -1591,7 +1613,10 @@ static void spawn_recv(int status, orte_process_name_t* sender,
     job = opal_pointer_array_get_item(&tool_jobs, tool_job_index);
     job->jobid = jobid;
 
+    /* Retrieve class pointer */
+    class_ptr = opal_pointer_array_get_item(&class_ptrs, tool_job_index);
+
     /* Inform client */
     if (cbdata != NULL)
-        (*cbdata)(tool_job_index);
+        (*cbdata)(tool_job_index, class_ptr);
 }
