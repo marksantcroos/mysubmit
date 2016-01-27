@@ -10,13 +10,13 @@ DVM_URI = "file:/Users/mark/proj/openmpi/mysubmit/dvm_uri"
 mywait = 0
 myspawn = 0
 
-@ffi.callback("void(int, void *)")
+@ffi.def_extern()
 def f(task, cbdata):
     print "Task %d is started!" % task
     global myspawn
     myspawn -= 1
 
-@ffi.callback("void(int, int, void *)")
+@ffi.def_extern()
 def g(task, status, cbdata):
     print "Task %d is completed with status %d!" % (task, status)
     global mywait
@@ -36,7 +36,7 @@ for i in range(1):
         ffi.NULL, # Required
     ]
     argv = ffi.new("char *[]", argv_keepalive)
-    task = lib.submit_job(argv, f, g, ffi.NULL)
+    task = lib.submit_job(argv, lib.f, lib.g, ffi.NULL)
     mywait += 1
     myspawn += 1
     print "Task %d submitted!" % task

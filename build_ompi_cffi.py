@@ -39,6 +39,10 @@ ffi.cdef("""
 int submit_job(char *argv[], void (*launch_cb)(int, void *), void (*finish_cb)(int, int, void *), void *cbdata);
 int opal_event_loop(struct event_base *, int);
 
+/* Callbacks */
+extern "Python" void g(int, int, void *);
+extern "Python" void f(int, void *);
+
 /* Variables */
 typedef struct event_base opal_event_base_t;
 opal_event_base_t *orte_event_base = {0};
