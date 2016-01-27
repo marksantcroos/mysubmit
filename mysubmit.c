@@ -349,10 +349,7 @@ int submit_job(char *argv[], void (*launch_cb)(int, void *), void (*finish_cb)(i
     int tool_job_index;
     opal_cmd_line_t cmd_line;
     static bool first = true;
-    int i;
 
-//    for (i=0; i<argc; i++)
-//        printf("argv[%d]: %s\n", i, argv[i]);
 
     if (first) {
         opal_pointer_array_init(&tool_jobs, 256, INT_MAX, 128);
