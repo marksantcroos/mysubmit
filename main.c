@@ -6,12 +6,12 @@
 int mywait;
 int myspawn;
 
-void launch_cb(int task) {
+void launch_cb(int task, void *cbdata) {
     printf("Task %d launched!\n", task);
     myspawn--;
 }
 
-void finish_cb(int task, int status) {
+void finish_cb(int task, int status, void *cbdata) {
     printf("Task %d returned %d!\n", task, status);
     mywait--;
 }
