@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
     for (i = 0; i < 10; i++) {
         char *arg;
         char ** tmpargv;
-        void * cb;
+        void * cb = NULL;
 
         tmpargv = opal_argv_copy(argv);
 
