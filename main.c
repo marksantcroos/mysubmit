@@ -1,17 +1,17 @@
 #include "opal/util/opal_environ.h"
 #include "orte/mca/plm/plm.h"
 
-#include "mysubmit.h"
-
 int mywait;
 int myspawn;
 
-void launch_cb(int task, void *cbdata) {
+int orte_submit_job(char *argv[], void (*launch_cb)(int), void (*finish_cb)(int, int));
+
+void launch_cb(int task) {
     printf("Task %d launched!\n", task);
     myspawn--;
 }
 
-void finish_cb(int task, int status, void *cbdata) {
+void finish_cb(int task, int status) {
     printf("Task %d returned %d!\n", task, status);
     mywait--;
 }
@@ -25,8 +25,7 @@ int main(int argc, char *argv[])
 
     for (i = 0; i < 10; i++) {
         char *arg;
-        char ** tmpargv;
-        void * cb = NULL;
+        char **tmpargv;
 
         tmpargv = opal_argv_copy(argv);
 
@@ -35,10 +34,12 @@ int main(int argc, char *argv[])
         asprintf(&arg, "t=%d; echo $t; sleep $t", i);
         opal_argv_append_nosize(&tmpargv, arg);
 
-        task = submit_job(tmpargv, &launch_cb, &finish_cb, cb);
-        printf("Task %d submitted!\n", task);
-        myspawn++;
-        mywait++;
+        task = orte_submit_job(tmpargv, &launch_cb, &finish_cb);
+        if (task >= 0) {
+            printf("Task %d submitted!\n", task);
+            myspawn++;
+            mywait++;
+        } else printf("Task submission failed!\n");
     }
 
     while (myspawn > 0 || mywait > 0) {
