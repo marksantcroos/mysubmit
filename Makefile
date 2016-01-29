@@ -1,16 +1,10 @@
-all: main ompi_cffi.so
+all: main
 
 clean:
-	rm -rf libsubmit.so mysubmit.o main mysubmit ompi_cffi.so ompi_cffi.o ompi_cffi.c main.dSYM
+	rm -rf main main.dSYM
 
-mysubmit.o: mysubmit.c mysubmit.h
-	gcc -fPIC -Wall -g -c mysubmit.c -I ../src/ompi/orte/include -I ../src/ompi/build/opal/include -I ../src/ompi/opal/include -I ../src/ompi -I ../src/ompi/opal/mca/event/libevent2022/libevent -L ../installed/DEBUG/lib -lopen-rte -lopen-pal
-
-libsubmit.so: mysubmit.o
-	gcc -Wall -g -shared -o /Users/mark/proj/openmpi/mysubmit/libsubmit.so mysubmit.o -I ../src/ompi/orte/include -I ../src/ompi/build/opal/include -I ../src/ompi/opal/include -I ../src/ompi -I ../src/ompi/opal/mca/event/libevent2022/libevent -L ../installed/DEBUG/lib -lopen-rte -lopen-pal
+CFLAGS = `PKG_CONFIG_PATH=${OMPI_PREFIX}/lib/pkgconfig pkg-config --define-variable=pkgincludedir=\`ompi_info --path pkgincludedir --parsable|cut -d: -f3\` --cflags orte opal`
+LDFLAGS = `PKG_CONFIG_PATH=${OMPI_PREFIX}/lib/pkgconfig pkg-config --define-variable=pkgincludedir=\`ompi_info --path pkgincludedir --parsable|cut -d: -f3\` --libs orte opal`
 
 main: main.c
-	gcc -Wall -g -o main main.c -I ../src/ompi/orte/include -I ../src/ompi/build/opal/include -I ../src/ompi/opal/include -I ../src/ompi -I ../src/ompi/opal/mca/event/libevent2022/libevent -L ../installed/DEBUG/lib -L /Users/mark/proj/openmpi/mysubmit -lopen-rte -lopen-pal
-
-ompi_cffi.so: build_ompi_cffi.py libsubmit.so
-	python build_ompi_cffi.py
+	gcc -Wall -g -o main main.c $(CFLAGS) $(LDFLAGS)
