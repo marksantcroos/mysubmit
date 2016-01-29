@@ -3,19 +3,19 @@
 import os
 import time
 
-from ompi_cffi import ffi, lib
+from orte_cffi import ffi, lib
 
 DVM_URI = "file:/Users/mark/proj/openmpi/mysubmit/dvm_uri"
 
 @ffi.def_extern()
-def launch_cb(task, cbdata):
+def launch_cb(task):
     print "Task %d is started!" % task
     instance = task_instance_map[task]
     instance.myspawn -= 1
     print "Map length: %d" % len(task_instance_map)
 
 @ffi.def_extern()
-def finish_cb(task, status, cbdata):
+def finish_cb(task, status):
     print "Task %d is completed with status %d!" % (task, status)
     instance = task_instance_map[task]
     instance.mywait -= 1
@@ -46,7 +46,7 @@ class RP():
                 ffi.NULL, # Required
             ]
             argv = ffi.new("char *[]", argv_keepalive)
-            task = lib.submit_job(argv, lib.launch_cb, lib.finish_cb, ffi.NULL)
+            task = lib.orte_submit_job(argv, lib.launch_cb, lib.finish_cb)
             task_instance_map[task] = self
             self.mywait += 1
             self.myspawn += 1
