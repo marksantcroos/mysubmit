@@ -47,8 +47,6 @@ int main(int argc, char *argv[])
     }
 
     printf("DONE\n");
-    /* cleanup and leave */
-    orte_finalize();
 
     exit(orte_exit_status);
 }
