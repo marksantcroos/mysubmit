@@ -9,8 +9,8 @@ mysubmit.o: mysubmit.c mysubmit.h
 libsubmit.so: mysubmit.o
 	gcc -Wall -g -shared -o /Users/mark/proj/openmpi/mysubmit/libsubmit.so mysubmit.o -I ../src/ompi/orte/include -I ../src/ompi/build/opal/include -I ../src/ompi/opal/include -I ../src/ompi -I ../src/ompi/opal/mca/event/libevent2022/libevent -L ../installed/DEBUG/lib -lopen-rte -lopen-pal
 
-main: main.c libsubmit.so mysubmit.h
-	gcc -Wall -g -o main main.c -I ../src/ompi/orte/include -I ../src/ompi/build/opal/include -I ../src/ompi/opal/include -I ../src/ompi -I ../src/ompi/opal/mca/event/libevent2022/libevent -L ../installed/DEBUG/lib -L /Users/mark/proj/openmpi/mysubmit -lopen-rte -lopen-pal -lsubmit
+main: main.c
+	gcc -Wall -g -o main main.c -I ../src/ompi/orte/include -I ../src/ompi/build/opal/include -I ../src/ompi/opal/include -I ../src/ompi -I ../src/ompi/opal/mca/event/libevent2022/libevent -L ../installed/DEBUG/lib -L /Users/mark/proj/openmpi/mysubmit -lopen-rte -lopen-pal
 
 ompi_cffi.so: build_ompi_cffi.py libsubmit.so
 	python build_ompi_cffi.py
