@@ -8,14 +8,14 @@ from orte_cffi import ffi, lib
 DVM_URI = "file:/Users/mark/proj/openmpi/mysubmit/dvm_uri"
 
 @ffi.def_extern()
-def launch_cb(task):
+def launch_cb(task, jdata, status, cbdata):
     print "Task %d is started!" % task
     instance = task_instance_map[task]
     instance.myspawn -= 1
     print "Map length: %d" % len(task_instance_map)
 
 @ffi.def_extern()
-def finish_cb(task, status):
+def finish_cb(task, jdata, status, cbdata):
     print "Task %d is completed with status %d!" % (task, status)
     instance = task_instance_map[task]
     instance.mywait -= 1
@@ -36,17 +36,25 @@ class RP():
 
     def run(self):
 
-        for i in range(3):
+        argv_keepalive = [
+            ffi.new("char[]", "RADICAL-Pilot"), # Will be stripped off by the library
+            ffi.new("char[]", "--hnp"), ffi.new("char[]", DVM_URI),
+            ffi.NULL, # Required
+        ]
+        argv = ffi.new("char *[]", argv_keepalive)
+        lib.orte_submit_init(3, argv)
+
+        for i in range(9):
+
             argv_keepalive = [
-                ffi.new("char[]", "RADICAL-Pilot"), # Will be stripped off by the library
-                ffi.new("char[]", "--hnp"), ffi.new("char[]", DVM_URI),
+                ffi.new("char[]", "RADICAL-Pilot"),
                 ffi.new("char[]", "--np"), ffi.new("char[]", "1"),
                 ffi.new("char[]", "bash"), ffi.new("char[]", "-c"),
                 ffi.new("char[]", "t=%d; echo $t; touch TOUCHME; sleep $t; exit 0" % i),
                 ffi.NULL, # Required
             ]
             argv = ffi.new("char *[]", argv_keepalive)
-            task = lib.orte_submit_job(argv, lib.launch_cb, lib.finish_cb)
+            task = lib.orte_submit_job(argv, lib.launch_cb, ffi.NULL, lib.finish_cb, ffi.NULL)
             task_instance_map[task] = self
             self.mywait += 1
             self.myspawn += 1
