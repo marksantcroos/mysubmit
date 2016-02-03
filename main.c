@@ -23,7 +23,7 @@ int main()
     int task;
     int rc;
     int argc;
-    char **argv;
+    char **argv = NULL;
 
     opal_setenv("OMPI_MCA_ess_tool_async_progress", "1", true, &environ);
 
