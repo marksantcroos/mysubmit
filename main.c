@@ -4,7 +4,7 @@
 int mywait;
 int myspawn;
 
-#define TASKS 9
+#define TASKS 2
 #define CORES "1"
 
 void launch_cb(int index, orte_job_t *jdata, int ret, void *cbdata) {
@@ -128,7 +128,8 @@ int main()
         opal_argv_append_nosize(&cmd, "-c");
 
         char *arg;
-        asprintf(&arg, "t=%d; echo $t; sleep $t", i);
+        //asprintf(&arg, "t=%d; echo $t; sleep $t", i);
+        asprintf(&arg, "sleep 0");
         opal_argv_append_nosize(&cmd, arg);
         free(arg);
 
