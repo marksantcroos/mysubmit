@@ -8,7 +8,7 @@ int myspawn;
 #define CORES "1"
 
 void launch_cb(int index, orte_job_t *jdata, int ret, void *cbdata) {
-    printf("Task %d launched!\n", index);
+    printf("Task %d launched with status: %d!\n", index, ret);
     myspawn--;
 }
 
