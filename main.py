@@ -42,7 +42,7 @@ class RP():
             ffi.NULL, # Required
         ]
         argv = ffi.new("char *[]", argv_keepalive)
-        lib.orte_submit_init(3, argv)
+        lib.orte_submit_init(3, argv, ffi.NULL)
 
         for i in range(9):
 
