@@ -4,7 +4,7 @@
 int mywait;
 int myspawn;
 
-#define TASKS 9
+#define TASKS 2
 #define CORES "1"
 
 void launch_cb(int index, orte_job_t *jdata, int ret, void *cbdata) {
