@@ -25,7 +25,6 @@ int main()
     int argc;
     char **argv = NULL;
 
-
     opal_setenv("OMPI_MCA_ess_tool_async_progress", "1", true, &environ);
 
     opal_argv_append_nosize(&argv, "radical-pilot");
