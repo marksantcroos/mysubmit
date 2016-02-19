@@ -5,25 +5,28 @@
 int active;
 int remaining;
 
-#define TASKS 20480
-#define CORES 4096
+#define TASKS 640
+#define CORES 128
 
 void launch_cb(int index, orte_job_t *jdata, int ret, void *cbdata) {
-    printf("Task %d launched with status: %d!\n", index, ret);
+    //printf("Task %d launched with status: %d!\n", index, ret);
 
-    if (ret < 0)
+    if (ret < 0) {
+        printf("Task %d launch failed with status: %d!\n", index, ret);
         active--;
+    }
 }
 
 static void finish_cb(int index, orte_job_t *jdata, int ret, void *cbdata) {
-    if (ret == 0)
-        printf("Task %d completed succesfully!\n", index);
-    else if (ret > 0)
+    if (ret == 0) {
+        //printf("Task %d completed succesfully!\n", index);
+    } else if (ret > 0) {
         printf("Task %d failed with error %d!\n", index, ret);
-    else if (ret == ORTE_ERR_JOB_CANCELLED)
+    } else if (ret == ORTE_ERR_JOB_CANCELLED) {
         printf("Task %d was cancelled!\n", index);
-    else
+    } else {
         printf("Task %d failed with error %d (%s)!\n", index, ret, ORTE_ERROR_NAME(ret));
+    }
 
     active--;
 }
@@ -51,8 +54,6 @@ int main()
     }
     
     while (remaining > 0 || active > 0) {
-        printf("remaining: %d active: %d\n", remaining, active);
-
         if (active < CORES && remaining > 0) {
             char **cmd = NULL; // Required for the functioning of opal_argv_command
             opal_argv_append_nosize(&cmd, "orte-submit");
@@ -64,7 +65,7 @@ int main()
             rc = orte_submit_job(cmd, &index, launch_cb, NULL, finish_cb, NULL);
 
             if (rc == 0) {
-                printf("Task %d submitted!\n", index);
+                //printf("Task %d submitted!\n", index);
                 remaining--;
                 active++;
             } else {
