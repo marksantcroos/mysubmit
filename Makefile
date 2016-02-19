@@ -1,4 +1,4 @@
-all: main
+all: main mw
 
 clean:
 	rm -rf main main.dSYM
@@ -8,3 +8,6 @@ LDFLAGS = `PKG_CONFIG_PATH=\`ompi_info --path libdir --parsable|cut -d: -f3\`/pk
 
 main: main.c
 	gcc -Wall -g -o main main.c $(CFLAGS) $(LDFLAGS)
+
+mw: mw.c
+	gcc -Wall -g -o mw mw.c $(CFLAGS) $(LDFLAGS)
