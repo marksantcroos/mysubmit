@@ -5,7 +5,7 @@
 int mywait;
 int myspawn;
 
-#define TASKS 3
+#define TASKS 4096
 #define CORES "1"
 
 void launch_cb(int index, orte_job_t *jdata, int ret, void *cbdata) {
@@ -62,9 +62,10 @@ int main()
 
         char *arg;
         //asprintf(&arg, "t=%d; echo $t; sleep $t", i);
-        asprintf(&arg, "sleep 30");
+        //asprintf(&arg, "sleep 30");
         //asprintf(&arg, "false");
         //asprintf(&arg, "true");
+        asprintf(&arg, "hostname");
         opal_argv_append_nosize(&cmd, arg);
         free(arg);
 
@@ -79,21 +80,21 @@ int main()
         }
         opal_argv_free(cmd);
 
-        if (index == 2) {
-            printf("Sleeping before killing task ...\n");
-            sleep(1);
-            printf("Awake ... killing task!\n");
-            orte_submit_cancel(index);
-        }
+        //if (index == 2) {
+        //    printf("Sleeping before killing task ...\n");
+        //    sleep(1);
+        //    printf("Awake ... killing task!\n");
+        //    orte_submit_cancel(index);
+       // }
     }
 
     while (myspawn > 0 || mywait > 0) {
         usleep(10000);
     }
 
-    printf("Shutting down DVM\n");
-    orte_submit_halt();
-    sleep(1);
+    //printf("Shutting down DVM\n");
+    //orte_submit_halt();
+    //sleep(1);
 
     orte_submit_finalize();
 
