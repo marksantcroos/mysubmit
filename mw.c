@@ -5,8 +5,9 @@
 int active;
 int remaining;
 
-#define TASKS 640
-#define CORES 128
+#define TASKS 64
+#define CORES 8
+#define SLEEP "5"
 
 void launch_cb(int index, orte_job_t *jdata, int ret, void *cbdata) {
     //printf("Task %d launched with status: %d!\n", index, ret);
@@ -60,7 +61,7 @@ int main()
             opal_argv_append_nosize(&cmd, "--np");
             opal_argv_append_nosize(&cmd, "1");
             opal_argv_append_nosize(&cmd, "sleep");
-            opal_argv_append_nosize(&cmd, "60");
+            opal_argv_append_nosize(&cmd, SLEEP);
 
             rc = orte_submit_job(cmd, &index, launch_cb, NULL, finish_cb, NULL);
 
