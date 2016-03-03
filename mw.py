@@ -11,11 +11,11 @@ from radical.pilot import Session
 from radical.pilot.utils import inject_metadata
 import radical.utils as ru
 
-DVM_URI = "file:/Users/mark/proj/openmpi/mysubmit/dvm_uri"
+DVM_URI = "file:dvm_uri"
 
-CORES=8
-TASKS=1000
-SLEEP=0
+CORES=4096
+TASKS=12288
+SLEEP=60
 
 @ffi.def_extern()
 def launch_cb(index, jdata, status, cbdata):
@@ -80,9 +80,9 @@ class RP():
                 argv_keepalive = [
                     ffi.new("char[]", "RADICAL-Pilot"),
                     ffi.new("char[]", "--np"), ffi.new("char[]", "1"),
-                     ffi.new("char[]", "true"),
-                    # ffi.new("char[]", "bash"), ffi.new("char[]", "-c"),
-                    # ffi.new("char[]", "sleep %d" % SLEEP),
+                    # ffi.new("char[]", "true"),
+                    ffi.new("char[]", "bash"), ffi.new("char[]", "-c"),
+                    ffi.new("char[]", "sleep %d" % SLEEP),
                     ffi.NULL, # NULL Termination Required
                 ]
                 argv = ffi.new("char *[]", argv_keepalive)
