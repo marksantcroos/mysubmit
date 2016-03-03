@@ -117,7 +117,10 @@ if __name__ == '__main__':
     report = ru.LogReporter(name='mw')
 
     # Request to create a background asynchronous event loop
-    os.putenv("OMPI_MCA_ess_tool_async_progress", "enabled")
+    os.environ["OMPI_MCA_ess_tool_async_progress"] = "enabled"
+
+    # Make sure we enable profiling
+    os.environ["RADICAL_PILOT_PROFILE"] = "enabled"
 
     metadata = {
         'backend': 'ORTE',
