@@ -8,14 +8,15 @@ from orte_cffi import ffi, lib
 
 from radical.pilot.utils.prof_utils import Profiler, timestamp as util_timestamp
 from radical.pilot import Session
+from radical.pilot.states import EXECUTING, AGENT_STAGING_OUTPUT_PENDING
 from radical.pilot.utils import inject_metadata
 import radical.utils as ru
 
 DVM_URI = "file:dvm_uri"
 
-CORES=4096
-TASKS=12288
-SLEEP=60
+CORES=8
+TASKS=32
+SLEEP=2
 
 @ffi.def_extern()
 def launch_cb(index, jdata, status, cbdata):
@@ -23,6 +24,8 @@ def launch_cb(index, jdata, status, cbdata):
     handle = ffi.from_handle(cbdata)
     instance = handle['instance']
     task = handle['task']
+
+    instance.session.prof.prof('advance', uid=task, state=EXECUTING, timestamp=util_timestamp())
 
     print "Task %s with index %d is started with status %d!" % (task, index, status)
 
@@ -42,14 +45,13 @@ def finish_cb(index, jdata, status, cbdata):
     del instance.task_instance_map[index]
     print "Map length: %d" % len(instance.task_instance_map)
 
-    instance.session.prof.prof('advance', uid=task, state='AgentStagingOutputPending', timestamp=util_timestamp())
+    instance.session.prof.prof('advance', uid=task, state=AGENT_STAGING_OUTPUT_PENDING, timestamp=util_timestamp())
 
 
 class RP():
 
     # Dictionary to find class instance from task id
     task_instance_map = {}
-    task_instance_map2 = {}
     active = 0
 
     def __init__(self, session):
@@ -93,7 +95,6 @@ class RP():
                 lib.orte_submit_job(argv, index_ptr, lib.launch_cb, cbdata, lib.finish_cb, cbdata)
 
                 self.active += 1
-                self.session.prof.prof('advance', uid=task_id, state='Executing', timestamp=util_timestamp())
 
                 index = index_ptr[0] # pointer notation
                 self.task_instance_map[index] = cbdata
@@ -111,6 +112,7 @@ class RP():
 
 if __name__ == '__main__':
 
+    # TODO: enable profiling
 
     report = ru.LogReporter(name='mw')
 
