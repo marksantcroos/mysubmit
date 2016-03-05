@@ -8,14 +8,14 @@ from orte_cffi import ffi, lib
 
 from radical.pilot.utils.prof_utils import Profiler, timestamp as util_timestamp
 from radical.pilot import Session
-from radical.pilot.states import EXECUTING, AGENT_STAGING_OUTPUT_PENDING
+from radical.pilot.states import *
 from radical.pilot.utils import inject_metadata
 import radical.utils as ru
 
-DVM_URI = "file:dvm_uri"
+DVM_URI = "file:../dvm_uri"
 
 CORES=8
-TASKS=32
+TASKS=16
 SLEEP=2
 
 @ffi.def_extern()
@@ -25,7 +25,7 @@ def launch_cb(index, jdata, status, cbdata):
     instance = handle['instance']
     task = handle['task']
 
-    instance.session.prof.prof('advance', uid=task, state=EXECUTING, timestamp=util_timestamp())
+    instance.session.prof.prof('advance', uid=task, state=EXECUTING, timestamp=util_timestamp(), name='AgentExecutingComponent')
 
     print "Task %s with index %d is started with status %d!" % (task, index, status)
 
@@ -45,7 +45,7 @@ def finish_cb(index, jdata, status, cbdata):
     del instance.task_instance_map[index]
     print "Map length: %d" % len(instance.task_instance_map)
 
-    instance.session.prof.prof('advance', uid=task, state=AGENT_STAGING_OUTPUT_PENDING, timestamp=util_timestamp())
+    instance.session.prof.prof('advance', uid=task, state=AGENT_STAGING_OUTPUT_PENDING, timestamp=util_timestamp(), name='AgentExecutingComponent')
 
 
 class RP():
@@ -56,7 +56,8 @@ class RP():
 
     def __init__(self, session):
         self.session = session
-
+        os.mkdir(session.uid)
+        os.chdir(session.uid)
 
     def run(self, ):
 
@@ -77,16 +78,36 @@ class RP():
 
             if task_no <= TASKS and self.active < CORES:
 
-                task_id = 'unit.%d' % task_no
+                task_id = 'unit.%.6d' % task_no
+                cu_tmpdir = '%s' % task_id
+
+                self.session.prof.prof(event='get', state=AGENT_STAGING_INPUT_PENDING, uid=task_id, name='AgentStagingInputComponent')
+                self.session.prof.prof('advance', uid=task_id, state=AGENT_STAGING_INPUT, timestamp=util_timestamp(), name='AgentStagingInputComponent')
+                os.mkdir('%s' % cu_tmpdir)
+
+                self.session.prof.prof('advance', uid=task_id, state=EXECUTING_PENDING, timestamp=util_timestamp(), name='AgentSchedulingComponent')
 
                 argv_keepalive = [
                     ffi.new("char[]", "RADICAL-Pilot"),
                     ffi.new("char[]", "--np"), ffi.new("char[]", "1"),
-                    # ffi.new("char[]", "true"),
-                    ffi.new("char[]", "bash"), ffi.new("char[]", "-c"),
-                    ffi.new("char[]", "sleep %d" % SLEEP),
-                    ffi.NULL, # NULL Termination Required
                 ]
+
+                # Let the orted write stdout and stderr to rank-based output files
+                argv_keepalive.append(ffi.new("char[]", "--output-filename"))
+                argv_keepalive.append(ffi.new("char[]", "%s:nojobid,nocopy" % str(cu_tmpdir)))
+
+                argv_keepalive.append(ffi.new("char[]", "sh"))
+                argv_keepalive.append(ffi.new("char[]", "-c"))
+
+                task_command = 'sleep %d' % SLEEP
+
+                # Wrap in (sub)shell for output redirection
+                task_command = "echo script start_script `%s` >> %s/PROF; " % ('../gtod', cu_tmpdir) + \
+                      task_command + \
+                      "; echo script after_exec `%s` >> %s/PROF" % ('../gtod', cu_tmpdir)
+                argv_keepalive.append(ffi.new("char[]", str("%s; exit $RETVAL" % str(task_command))))
+
+                argv_keepalive.append(ffi.NULL) # NULL Termination Required
                 argv = ffi.new("char *[]", argv_keepalive)
 
                 struct = {'instance': self, 'task': task_id}
@@ -106,8 +127,23 @@ class RP():
             else:
                 time.sleep(0.001)
 
-        print("Done!")
-        #self.session.prof.close()
+        print("Execution done.")
+        print()
+        print("Collecting profiles ...")
+        for task_no in range(TASKS):
+            task_id = 'unit.%.6d' % task_no
+            self.session.prof.prof('advance', uid=task_id, state=AGENT_STAGING_OUTPUT, timestamp=util_timestamp(), name='AgentStagingOutputComponent')
+            cu_tmpdir = '%s' % task_id
+            if os.path.isfile("%s/PROF" % cu_tmpdir):
+                try:
+                    with open("%s/PROF" % cu_tmpdir, 'r') as prof_f:
+                        txt = prof_f.read()
+                        for line in txt.split("\n"):
+                            if line:
+                                x1, x2, x3 = line.split()
+                                self.session.prof.prof(x1, msg=x2, timestamp=float(x3), uid=task_id, name='AgentStagingOutputComponent')
+                except Exception as e:
+                    print("Pre/Post profiling file read failed: `%s`" % e)
 
 
 if __name__ == '__main__':
