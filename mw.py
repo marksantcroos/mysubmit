@@ -26,6 +26,8 @@ def launch_cb(index, jdata, status, cbdata):
     instance = handle['instance']
     task = handle['task']
 
+    instance.session.prof.prof('passed', msg="ExecWatcher picked up unit", uid=task, name='AgentExecutingComponent')
+
     instance.session.prof.prof('advance', uid=task, state=EXECUTING, name='AgentExecutingComponent')
 
     print "Task %s with index %d is started with status %d!" % (task, index, status)
@@ -161,8 +163,6 @@ class RP():
                 self.session.prof.prof(event='work done', state=EXECUTING_PENDING, uid=task_id, name='AgentExecutingComponent')
 
                 print "Task %s submitted!" % task_id
-
-                self.session.prof.prof('passed', msg="ExecWatcher picked up unit", uid=task_id, name='AgentExecutingComponent')
 
                 self.active += 1
                 task_no += 1
