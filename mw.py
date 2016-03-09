@@ -13,10 +13,11 @@ from radical.pilot.utils import inject_metadata
 import radical.utils as ru
 
 DVM_URI = "file:../dvm_uri"
+GTOD = "$HOME/gtod"
 
-CORES=8
-TASKS=16
-SLEEP=2
+CORES=4096
+TASKS=4096
+SLEEP=64
 
 @ffi.def_extern()
 def launch_cb(index, jdata, status, cbdata):
@@ -138,9 +139,9 @@ class RP():
                 task_command = 'sleep %d' % SLEEP
 
                 # Wrap in (sub)shell for output redirection
-                task_command = "echo script start_script `%s` >> %s/PROF; " % ('../../gtod', cu_tmpdir) + \
+                task_command = "echo script start_script `%s` >> %s/PROF; " % (GTOD, cu_tmpdir) + \
                       task_command + \
-                      "; echo script after_exec `%s` >> %s/PROF" % ('../../gtod', cu_tmpdir)
+                      "; echo script after_exec `%s` >> %s/PROF" % (GTOD, cu_tmpdir)
                 argv_keepalive.append(ffi.new("char[]", str("%s; exit $RETVAL" % str(task_command))))
 
                 argv_keepalive.append(ffi.NULL) # NULL Termination Required
