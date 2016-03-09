@@ -138,9 +138,9 @@ class RP():
                 task_command = 'sleep %d' % SLEEP
 
                 # Wrap in (sub)shell for output redirection
-                task_command = "echo script start_script `%s` >> %s/PROF; " % ('../gtod', cu_tmpdir) + \
+                task_command = "echo script start_script `%s` >> %s/PROF; " % ('../../gtod', cu_tmpdir) + \
                       task_command + \
-                      "; echo script after_exec `%s` >> %s/PROF" % ('../gtod', cu_tmpdir)
+                      "; echo script after_exec `%s` >> %s/PROF" % ('../../gtod', cu_tmpdir)
                 argv_keepalive.append(ffi.new("char[]", str("%s; exit $RETVAL" % str(task_command))))
 
                 argv_keepalive.append(ffi.NULL) # NULL Termination Required
