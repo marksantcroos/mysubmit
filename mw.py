@@ -25,7 +25,7 @@ def launch_cb(index, jdata, status, cbdata):
     instance = handle['instance']
     task = handle['task']
 
-    instance.session.prof.prof('advance', uid=task, state=EXECUTING, timestamp=util_timestamp(), name='AgentExecutingComponent')
+    instance.session.prof.prof('advance', uid=task, state=EXECUTING, name='AgentExecutingComponent')
 
     print "Task %s with index %d is started with status %d!" % (task, index, status)
 
@@ -39,14 +39,24 @@ def finish_cb(index, jdata, status, cbdata):
     instance = handle['instance']
     task = handle['task']
 
+
     instance.active -= 1
     print "Task %s with index %d is completed with status %d!" % (task, index, status)
 
     del instance.task_instance_map[index]
     print "Map length: %d" % len(instance.task_instance_map)
 
-    instance.session.prof.prof('advance', uid=task, state=AGENT_STAGING_OUTPUT_PENDING, timestamp=util_timestamp(), name='AgentExecutingComponent')
+    instance.session.prof.prof('unschedule', msg='released', uid=task, name='AgentSchedulingComponent')
 
+    instance.session.prof.prof('exec', msg='execution complete', uid=task, name='AgentExecutingComponent')
+
+    if not status:
+        instance.session.prof.prof('final', msg='execution succeeded', uid=task, name='AgentExecutingComponent')
+    else:
+        instance.session.prof.prof('final', msg='execution failed', uid=task, name='AgentExecutingComponent')
+
+    instance.session.prof.prof('advance', uid=task, state=AGENT_STAGING_OUTPUT_PENDING, name='AgentExecutingComponent')
+    instance.session.prof.prof(event='put', state=AGENT_STAGING_OUTPUT_PENDING, uid=task, name='AgentExecutingComponent')
 
 class RP():
 
@@ -81,11 +91,37 @@ class RP():
                 task_id = 'unit.%.6d' % task_no
                 cu_tmpdir = '%s' % task_id
 
+                #
+                # ASIC
+                #
                 self.session.prof.prof(event='get', state=AGENT_STAGING_INPUT_PENDING, uid=task_id, name='AgentStagingInputComponent')
-                self.session.prof.prof('advance', uid=task_id, state=AGENT_STAGING_INPUT, timestamp=util_timestamp(), name='AgentStagingInputComponent')
+                self.session.prof.prof(event='work start', state=AGENT_STAGING_INPUT_PENDING, uid=task_id, name='AgentStagingInputComponent')
+                self.session.prof.prof('advance', uid=task_id, state=AGENT_STAGING_INPUT, name='AgentStagingInputComponent')
                 os.mkdir('%s' % cu_tmpdir)
+                self.session.prof.prof('advance', uid=task_id, state=ALLOCATING_PENDING, name='AgentStagingInputComponent')
+                self.session.prof.prof(event='work done', state=AGENT_STAGING_INPUT_PENDING, uid=task_id, name='AgentStagingInputComponent')
+                self.session.prof.prof(event='put', state=ALLOCATING_PENDING, uid=task_id, name='AgentStagingInputComponent')
 
-                self.session.prof.prof('advance', uid=task_id, state=EXECUTING_PENDING, timestamp=util_timestamp(), name='AgentSchedulingComponent')
+                #
+                # ASC
+                #
+                self.session.prof.prof(event='get', state=ALLOCATING_PENDING, uid=task_id, name='AgentSchedulingComponent')
+                self.session.prof.prof(event='work start', state=ALLOCATING_PENDING, uid=task_id, name='AgentSchedulingComponent')
+                self.session.prof.prof('advance', uid=task_id, state=ALLOCATING, name='AgentSchedulingComponent')
+                self.session.prof.prof('schedule', msg='try', uid=task_id, name='AgentSchedulingComponent')
+                self.session.prof.prof('schedule', msg='allocated', uid=task_id, name='AgentSchedulingComponent')
+                self.session.prof.prof('advance', uid=task_id, state=EXECUTING_PENDING, name='AgentSchedulingComponent')
+                self.session.prof.prof(event='put', state=EXECUTING_PENDING, uid=task_id, name='AgentSchedulingComponent')
+                self.session.prof.prof(event='work done', state=ALLOCATING_PENDING, uid=task_id, name='AgentSchedulingComponent')
+
+                #
+                # AEC
+                #
+
+                self.session.prof.prof(event='get', state=EXECUTING_PENDING, uid=task_id, name='AgentExecutingComponent')
+                self.session.prof.prof(event='work start', state=EXECUTING_PENDING, uid=task_id, name='AgentExecutingComponent')
+                self.session.prof.prof('exec', msg='unit launch', uid=task_id, name='AgentExecutingComponent')
+                self.session.prof.prof('spawn', msg='unit spawn', uid=task_id, name='AgentExecutingComponent')
 
                 argv_keepalive = [
                     ffi.new("char[]", "RADICAL-Pilot"),
@@ -110,18 +146,24 @@ class RP():
                 argv_keepalive.append(ffi.NULL) # NULL Termination Required
                 argv = ffi.new("char *[]", argv_keepalive)
 
+                self.session.prof.prof('command', msg='launch command constructed', uid=task_id, name='AgentExecutingComponent')
+
                 struct = {'instance': self, 'task': task_id}
                 cbdata = ffi.new_handle(struct)
 
                 lib.orte_submit_job(argv, index_ptr, lib.launch_cb, cbdata, lib.finish_cb, cbdata)
 
-                self.active += 1
-
                 index = index_ptr[0] # pointer notation
                 self.task_instance_map[index] = cbdata
 
+                self.session.prof.prof('spawn', msg='spawning passed to orte', uid=task_id, name='AgentExecutingComponent')
+                self.session.prof.prof(event='work done', state=EXECUTING_PENDING, uid=task_id, name='AgentExecutingComponent')
+
                 print "Task %s submitted!" % task_id
 
+                self.session.prof.prof('passed', msg="ExecWatcher picked up unit", uid=task_id, name='AgentExecutingComponent')
+
+                self.active += 1
                 task_no += 1
 
             else:
@@ -132,7 +174,7 @@ class RP():
         print("Collecting profiles ...")
         for task_no in range(TASKS):
             task_id = 'unit.%.6d' % task_no
-            self.session.prof.prof('advance', uid=task_id, state=AGENT_STAGING_OUTPUT, timestamp=util_timestamp(), name='AgentStagingOutputComponent')
+            self.session.prof.prof('advance', uid=task_id, state=AGENT_STAGING_OUTPUT, name='AgentStagingOutputComponent')
             cu_tmpdir = '%s' % task_id
             if os.path.isfile("%s/PROF" % cu_tmpdir):
                 try:
