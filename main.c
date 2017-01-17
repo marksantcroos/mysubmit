@@ -5,20 +5,31 @@
 int mywait;
 int myspawn;
 
-#define TASKS 4096
+#define TASKS 1
 #define CORES "1"
 
-void launch_cb(int index, orte_job_t *jdata, int ret, void *cbdata) {
-    printf("Task %d launched with status: %d!\n", index, ret);
+void launch_cb(int index, orte_job_t *jdata, int status, void *cbdata) {
+    struct timeval tv, *tvptr;
+
     myspawn--;
 
-    if (ret < 0)
+    if (status == 0) {
+        tvptr = &tv;
+        orte_get_attribute(&jdata->attributes, ORTE_JOB_LAUNCHED_TIMESTAMP, (void **)&tvptr, OPAL_TIMEVAL);
+        printf("Task %d launched at %ld.%ld with status: %d!\n", index, (long)tv.tv_sec, (long)tv.tv_usec, status);
+    } else {
         mywait--;
+    }
 }
 
 static void finish_cb(int index, orte_job_t *jdata, int ret, void *cbdata) {
+    struct timeval tv, *tvptr;
+
+    tvptr = &tv;
+    orte_get_attribute(&jdata->attributes, ORTE_JOB_TERMINATED_TIMESTAMP, (void **)&tvptr, OPAL_TIMEVAL);
+
     if (ret == 0)
-        printf("Task %d completed succesfully!\n", index);
+        printf("Task %d completed succesfully at %ld.%ld!\n", index, (long)tv.tv_sec, (long)tv.tv_usec);
     else if (ret > 0)
         printf("Task %d failed with error %d!\n", index, ret);
     else if (ret == ORTE_ERR_JOB_CANCELLED)
@@ -62,10 +73,10 @@ int main()
 
         char *arg;
         //asprintf(&arg, "t=%d; echo $t; sleep $t", i);
-        //asprintf(&arg, "sleep 30");
+        asprintf(&arg, "sleep 5");
         //asprintf(&arg, "false");
         //asprintf(&arg, "true");
-        asprintf(&arg, "hostname");
+        //asprintf(&arg, "hostname");
         opal_argv_append_nosize(&cmd, arg);
         free(arg);
 
