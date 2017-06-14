@@ -14,11 +14,7 @@ from radical.pilot.utils import inject_metadata
 import radical.utils as ru
 
 DVM_URI = "file:../dvm_uri"
-GTOD = "$HOME/gtod"
-
-CORES=4096
-TASKS=4096
-SLEEP=64
+GTOD = "~/gtod"
 
 @ffi.def_extern()
 def launch_cb(index, jdata, status, cbdata):
