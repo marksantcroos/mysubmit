@@ -2,112 +2,110 @@
 #include "orte/orted/orted_submit.h"
 #include "orte/mca/errmgr/errmgr.h"
 
-int mywait;
-int myspawn;
+int active;
+int remaining;
 
-#define TASKS 1
-#define CORES "1"
+#define TASKS 1000
+#define CORES 8
+#define SLEEP "0"
+#define TASK_SIZE 1
 
-void launch_cb(int index, orte_job_t *jdata, int status, void *cbdata) {
-    struct timeval tv, *tvptr;
+void launch_cb(int index, orte_job_t *jdata, int ret, void *cbdata) {
+    printf("Task %d launched with status: %d!\n", index, ret);
 
-    myspawn--;
+    int tid = *(int *)cbdata;
 
-    if (status == 0) {
-        tvptr = &tv;
-        orte_get_attribute(&jdata->attributes, ORTE_JOB_LAUNCHED_TIMESTAMP, (void **)&tvptr, OPAL_TIMEVAL);
-        printf("Task %d launched at %ld.%ld with status: %d!\n", index, (long)tv.tv_sec, (long)tv.tv_usec, status);
+    if (ret < 0) {
+        printf("Task %d launch failed with status: %d!\n", tid, ret);
+        exit(-1);
+        active -= TASK_SIZE;
     } else {
-        mywait--;
+        printf("Task %d launch successful with status: %d!\n", tid, ret);
     }
 }
 
 static void finish_cb(int index, orte_job_t *jdata, int ret, void *cbdata) {
-    struct timeval tv, *tvptr;
 
-    tvptr = &tv;
-    orte_get_attribute(&jdata->attributes, ORTE_JOB_TERMINATED_TIMESTAMP, (void **)&tvptr, OPAL_TIMEVAL);
+    int tid = *(int *)cbdata;
 
-    if (ret == 0)
-        printf("Task %d completed succesfully at %ld.%ld!\n", index, (long)tv.tv_sec, (long)tv.tv_usec);
-    else if (ret > 0)
-        printf("Task %d failed with error %d!\n", index, ret);
-    else if (ret == ORTE_ERR_JOB_CANCELLED)
-        printf("Task %d was cancelled!\n", index);
-    else
-        printf("Task %d failed with error %d (%s)!\n", index, ret, ORTE_ERROR_NAME(ret));
+    if (ret == 0) {
+        printf("Task %d completed succesfully!\n", tid);
+    } else if (ret > 0) {
+        printf("Task %d failed with error %d!\n", tid, ret);
+    } else if (ret == ORTE_ERR_JOB_CANCELLED) {
+        printf("Task %d was cancelled!\n", tid);
+    } else {
+        printf("Task %d failed with error %d (%s)!\n", tid, ret, ORTE_ERROR_NAME(ret));
+    }
 
-    mywait--;
+    active -= TASK_SIZE;
 }
 
 int main()
 {
-    int i;
     int index;
     int rc;
     int argc;
     char **argv = NULL;
+    int tids[TASKS];
+    int tid = 0;
 
+    remaining = TASKS;
 
     opal_setenv("OMPI_MCA_ess_tool_async_progress", "1", true, &environ);
 
     opal_argv_append_nosize(&argv, "radical-pilot");
     opal_argv_append_nosize(&argv, "--hnp");
     opal_argv_append_nosize(&argv, "file:dvm_uri");
-    argc = 3;
+    opal_argv_append_nosize(&argv, "--mca");
+    opal_argv_append_nosize(&argv, "timer_require_monotonic");
+    opal_argv_append_nosize(&argv, "false");
+
+    argc = 6;
 
     rc = orte_submit_init(argc, argv, NULL);
     if (rc > 0) {
         printf("init failed!\n");
         exit(rc);
     }
-    
-    for (i = 0; i < TASKS; i++) {
-        char **cmd = NULL; // Required for the functioning of opal_argv_command
-        opal_argv_append_nosize(&cmd, "orte-submit");
-        opal_argv_append_nosize(&cmd, "--np");
-        opal_argv_append_nosize(&cmd, CORES);
-        opal_argv_append_nosize(&cmd, "bash");
-        //opal_argv_append_nosize(&cmd, "blash");
-        opal_argv_append_nosize(&cmd, "-c");
 
-        char *arg;
-        //asprintf(&arg, "t=%d; echo $t; sleep $t", i);
-        asprintf(&arg, "sleep 5");
-        //asprintf(&arg, "false");
-        //asprintf(&arg, "true");
-        //asprintf(&arg, "hostname");
-        opal_argv_append_nosize(&cmd, arg);
-        free(arg);
+    while (remaining > 0 || active > 0) {
+        if ((active * TASK_SIZE) < CORES && remaining > 0) {
+            char **cmd = NULL; // Required for the functioning of opal_argv_command
+            opal_argv_append_nosize(&cmd, "orte-submit");
+            opal_argv_append_nosize(&cmd, "--np");
+            opal_argv_append_nosize(&cmd, "1");
+            opal_argv_append_nosize(&cmd, "--output-filename");
+            //opal_argv_append_nosize(&cmd, "./:nojobid,nocopy");
+            opal_argv_append_nosize(&cmd, "output:nocopy");
+            opal_argv_append_nosize(&cmd, "/bin/date");
+            //opal_argv_append_nosize(&cmd, "sleep");
+            //opal_argv_append_nosize(&cmd, SLEEP);
+            //opal_argv_append_nosize(&cmd, "sh");
+            //opal_argv_append_nosize(&cmd, "-c");
+            //opal_argv_append_nosize(&cmd, "lsof -p $(pidof orted)");
 
-        rc = orte_submit_job(cmd, &index, launch_cb, NULL, finish_cb, NULL);
+            tids[tid] = tid;
+            rc = orte_submit_job(cmd, &index, launch_cb, &tids[tid], finish_cb, &tids[tid]);
 
-        if (rc == 0) {
-            printf("Task %d submitted!\n", index);
-            myspawn++;
-            mywait++;
-        } else {
-            printf("Task submission failed!\n");
+            if (rc == 0) {
+                printf("Task %d submitted!\n", tid);
+                remaining--;
+                active += TASK_SIZE;
+            } else {
+                printf("Task submission failed!\n");
+            }
+            opal_argv_free(cmd);
+
+            tid++;
         }
-        opal_argv_free(cmd);
 
-        //if (index == 2) {
-        //    printf("Sleeping before killing task ...\n");
-        //    sleep(1);
-        //    printf("Awake ... killing task!\n");
-        //    orte_submit_cancel(index);
-       // }
+
+        //usleep(10000);
     }
 
-    while (myspawn > 0 || mywait > 0) {
-        usleep(10000);
-    }
-
-    //printf("Shutting down DVM\n");
-    //orte_submit_halt();
-    //sleep(1);
 
     orte_submit_finalize();
-
     exit(orte_exit_status);
 }
+
