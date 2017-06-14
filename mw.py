@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
+
 import os
-import sys
 import time
+import argparse
 
 from orte_cffi import ffi, lib
 
@@ -72,7 +73,7 @@ class RP():
         os.mkdir(session.uid)
         os.chdir(session.uid)
 
-    def run(self, ):
+    def run(self, cores, tasks, runtime):
 
         argv_keepalive = [
             ffi.new("char[]", "RADICAL-Pilot"), # Will be stripped off by the library
@@ -87,9 +88,9 @@ class RP():
         index_ptr = ffi.new("int[1]")
 
         task_no = 1
-        while task_no <= TASKS or self.active > 0:
+        while task_no <= tasks or self.active > 0:
 
-            if task_no <= TASKS and self.active < CORES:
+            if task_no <= tasks and self.active < cores:
 
                 task_id = 'unit.%.6d' % task_no
                 cu_tmpdir = '%s' % task_id
@@ -138,7 +139,7 @@ class RP():
                 argv_keepalive.append(ffi.new("char[]", "sh"))
                 argv_keepalive.append(ffi.new("char[]", "-c"))
 
-                task_command = 'sleep %d' % SLEEP
+                task_command = 'sleep %d' % runtime
 
                 # Wrap in (sub)shell for output redirection
                 task_command = "echo script start_script `%s` >> %s/PROF; " % (GTOD, cu_tmpdir) + \
@@ -173,7 +174,7 @@ class RP():
         print("Execution done.")
         print()
         print("Collecting profiles ...")
-        for task_no in range(TASKS):
+        for task_no in range(tasks):
             task_id = 'unit.%.6d' % task_no
             self.session.prof.prof('advance', uid=task_id, state=AGENT_STAGING_OUTPUT, name='AgentStagingOutputComponent')
             cu_tmpdir = '%s' % task_id
@@ -191,6 +192,13 @@ class RP():
 
 if __name__ == '__main__':
 
+    parser = argparse.ArgumentParser(description='Run a ORTE MW experiment')
+    parser.add_argument('--cores', type=int, help='the number of cores to run on', required=True)
+    parser.add_argument('--tasks', type=int, help='the number of tasks to run', required=True)
+    parser.add_argument('--runtime', type=int, help='the individual task runtime', required=True)
+
+    args = parser.parse_args()
+
     # TODO: enable profiling
 
     report = ru.LogReporter(name='mw')
@@ -203,12 +211,12 @@ if __name__ == '__main__':
 
     metadata = {
         'backend': 'ORTE',
-        'pilot_cores': CORES,
+        'pilot_cores': args.cores,
         'pilot_runtime': 0,
-        'cu_runtime': SLEEP,
+        'cu_runtime': args.runtime,
         'cu_cores': 1,
-        'cu_count': TASKS,
-        'generations': TASKS/CORES,
+        'cu_count': args.tasks,
+        'generations': args.tasks/args.cores,
         'barriers': [],
         'profiling': True,
         'label': 'mw',
@@ -217,13 +225,8 @@ if __name__ == '__main__':
         'exclusive_agent_nodes': False,
         'num_sub_agents': 0,
         'num_exec_instances_per_sub_agent': 0,
-        'effective_cores': CORES,
+        'effective_cores': args.cores,
     }
-
-    # if len(sys.argv) == 1:
-    #     client = 'mw'
-    # else:
-    #     client = sys.argv[1]
 
     sid = ru.generate_id('mw.session', mode=ru.ID_PRIVATE)
     session = Session(name=sid)
@@ -231,6 +234,8 @@ if __name__ == '__main__':
     inject_metadata(session, metadata)
 
     rp = RP(session=session)
-    rp.run()
+    rp.run(cores=args.cores, tasks=args.tasks, runtime=args.runtime)
 
     session.close(cleanup=False, terminate=True)
+
+    print "%s complete: %d cores, %d tasks, %d runtime" % (sid, args.cores, args.tasks, args.runtime)
